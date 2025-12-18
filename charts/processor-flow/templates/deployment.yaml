@@ -1,0 +1,189 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Values.application.environment }}-processor-forge"
+  labels:
+    app: "{{ .Values.application.environment }}-{{ .Values.application.name }}"
+    persistent-storage: required
+    biolevops/type: application
+    biolevops/layer: processor
+    biolevops/application_name: "{{ .Values.application.environment }}-{{ .Values.application.name }}"
+    biolevops/application_environment: "{{ .Values.application.environment }}"
+    biolevops/release_version: "{{ .Values.application.releaseVersion }}"
+    biolevops/deployment_date: "{{ now | unixEpoch }}" 
+    biolevops/build_date: "{{ .Values.image.build_date }}" 
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: "{{ .Values.application.environment }}-processor-forge"
+  template:
+    metadata:
+      labels:
+        app: "{{ .Values.application.environment }}-{{ .Values.application.name }}"
+        persistent-storage: required
+        biolevops/type: application
+        biolevops/layer: processor
+        biolevops/application_name: "{{ .Values.application.environment }}-{{ .Values.application.name }}"
+        biolevops/application_environment: "{{ .Values.application.environment }}"
+        biolevops/release_version: "{{ .Values.application.releaseVersion }}"
+        biolevops/deployment_date: "{{ now | unixEpoch }}" 
+        biolevops/build_date: "{{ .Values.image.build_date }}" 
+    spec:
+      {{- if .Values.image.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.image.imagePullSecrets }}
+      {{- end }}
+      initContainers:
+        - name: provision-temporal-namespace
+          image: curlimages/curl:8.15.0
+          env:
+            {{- /* .Values.env contains TEMPORAL_NAMESPACE */}}
+            {{- toYaml .Values.env | nindent 12 }}
+            - name: TEMPORAL_HTTP_BASE
+              value: "{{ .Values.initContainers.env.temporalHttpBase }}"
+            # Protobuf duration (e.g., 3 days = 259200s)
+            - name: RETENTION_DURATION
+              value: "{{ .Values.initContainers.env.retentionDuration }}"
+            # "true" to skip TLS verify for https/self-signed
+            - name: HTTP_INSECURE
+              value: "false"
+            # - name: HTTP_AUTHORIZATION # e.g. "Bearer <token>"
+            #   valueFrom:
+            #     secretKeyRef: { name: temporal-http, key: auth }
+            
+          command: ["/bin/sh","-c"]
+          args:
+            - |
+              set -eu
+
+              # Skip entirely if TEMPORAL_NAMESPACE is not set
+              if [ -z "${TEMPORAL_NAMESPACE:-}" ]; then
+                echo "TEMPORAL_NAMESPACE not set; skipping namespace provision."
+                exit 0
+              fi
+
+              SERVER="${TEMPORAL_HTTP_BASE%/}"
+              NS="${TEMPORAL_NAMESPACE}"
+              RET="${RETENTION_DURATION}"
+              KFLAG=""
+              [ "${HTTP_INSECURE:-false}" = "true" ] && KFLAG="-k"
+
+              echo "==> Provisioning Temporal namespace '${NS}' via ${SERVER}"
+
+              get_ns() {
+                URL="${SERVER}/api/v1/namespaces/${NS}"
+                if [ -n "${HTTP_AUTHORIZATION:-}" ]; then
+                  curl -sS -m 10 $KFLAG -f \
+                    -H "Content-Type: application/json" \
+                    -H "Authorization: ${HTTP_AUTHORIZATION}" \
+                    -X GET "$URL" >/dev/null
+                else
+                  curl -sS -m 10 $KFLAG -f \
+                    -H "Content-Type: application/json" \
+                    -X GET "$URL" >/dev/null
+                fi
+              }
+
+              create_ns() {
+                URL="${SERVER}/api/v1/namespaces"
+                DATA="{\"namespace\":\"${NS}\",\"workflowExecutionRetentionPeriod\":\"${RET}\"}"
+                if [ -n "${HTTP_AUTHORIZATION:-}" ]; then
+                  curl -sS -m 10 $KFLAG -f \
+                    -H "Content-Type: application/json" \
+                    -H "Authorization: ${HTTP_AUTHORIZATION}" \
+                    -X POST "$URL" -d "$DATA" >/dev/null
+                else
+                  curl -sS -m 10 $KFLAG -f \
+                    -H "Content-Type: application/json" \
+                    -X POST "$URL" -d "$DATA" >/dev/null
+                fi
+              }
+
+              # 1) Check if namespace exists
+              if get_ns; then
+                echo "Namespace '${NS}' already exists."
+                exit 0
+              fi
+
+              # 2) Create namespace
+              echo "Creating namespace '${NS}' ..."
+              create_ns
+
+              # 3) Brief wait and verify
+              sleep 5
+              get_ns
+              echo "Namespace '${NS}' provisioned."
+      containers:
+        - name: "{{ .Values.application.environment }}-processor-forge"
+          image: "{{ .Values.image.repository }}{{ .Values.image.application }}:{{ .Values.image.tag }}"
+          imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          resources:
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+          env:
+            {{- range .Values.env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
+            - name: EXCHANGE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.exchange_client.secretName }}
+                  key: {{ .Values.secrets.exchange_client.clientIdKey }}
+            - name: EXCHANGE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.exchange_client.secretName }}
+                  key: {{ .Values.secrets.exchange_client.clientSecretKey }}
+          {{- if .Values.probes.readiness.enabled }}
+          readinessProbe:
+            {{- toYaml (omit .Values.probes.readiness "enabled") | nindent 12 }}
+          {{- end }}
+          {{- if .Values.probes.liveness.enabled }}
+          livenessProbe:
+            {{- toYaml (omit .Values.probes.liveness "enabled") | nindent 12 }}
+          {{- end }}
+        - name: "{{ .Values.application.environment }}-biolevops-autoscaler"
+          image: "{{ .Values.image.repository }}{{ .Values.image.side_container }}:{{ .Values.image.side_container_tag }}"
+          imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+          env:
+            - name: APPLICATION_ENVIRONMENT
+              value: "{{ .Values.application.environment }}"
+            - name: APP_NAME
+              value: "{{ .Values.application.name }}"
+            - name: PROMETHEUS_URL
+              value: "{{ .Values.autoscaler.prometheusUrl }}"
+            - name: AUTOSCALER_THRESHOLD
+              value: "{{ .Values.autoscaler.threshold }}"
+            - name: AUTOSCALER_UP_FACTOR
+              value: "{{ .Values.autoscaler.upFactor }}"
+            - name: AUTOSCALER_DOWN_FACTOR
+              value: "{{ .Values.autoscaler.downFactor }}"
+            - name: AUTOSCALER_MIN_REPLICAS
+              value: "{{ .Values.autoscaler.minReplicas }}"
+            - name: AUTOSCALER_MAX_REPLICAS
+              value: "{{ .Values.autoscaler.maxReplicas }}"
+            - name: AUTOSCALER_INTERVAL
+              value: "{{ .Values.autoscaler.interval }}"
+            - name: AUTOSCALER_CUSTOM_METRIC
+              value: "last_over_time(kafka_consumergroup_lag_sum{topic=~\"processors.insights.requests.forge|processors.requests.forge\",service=\"prometheus-kafka-exporter-{{ .Values.application.environment }}\"}[30s])"
+            - name: LOG_CONSOLE
+              value: "true"
+            - name: LOG_LEVEL
+              value: "INFO"
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: {{ .Values.affinity.weight }}
+              preference:
+                matchExpressions:
+                  - key: "{{ .Values.affinity.key }}"
+                    operator: In
+                    values: {{ .Values.affinity.values }}

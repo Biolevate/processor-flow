@@ -1,0 +1,53 @@
+# syntax=docker/dockerfile:1
+
+# Build stage
+FROM public.ecr.aws/x2m9r8s3/chainguard/python:3.13.5-dev AS builder
+
+# Use root to install build deps
+USER root
+
+WORKDIR /app
+
+# Install only what's needed to build your wheels/artifacts
+RUN apk add --no-cache \
+  librdkafka-dev 
+
+# Enable UV bytecode compilation & copy mode
+ENV UV_COMPILE_BYTECODE=1 \
+  UV_LINK_MODE=copy
+
+# Install project dependencies (cached)
+ARG UV_INDEX_PYPI_INTERNAL_USERNAME="bot-pypi"
+ENV UV_INDEX_PYPI_INTERNAL_USERNAME=${UV_INDEX_PYPI_INTERNAL_USERNAME}
+RUN --mount=type=cache,target=/root/.cache/uv \
+  --mount=type=bind,source=uv.lock,target=uv.lock \
+  --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+  --mount=type=secret,id=NEXUS_BOT_PYPI_PASSWORD,env=UV_INDEX_PYPI_INTERNAL_PASSWORD \
+  uv sync --frozen --no-install-project --no-dev
+
+# Copy source & install the application itself (cached)
+COPY . /app
+RUN --mount=type=cache,target=/root/.cache/uv \
+  --mount=type=bind,source=uv.lock,target=uv.lock \
+  --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+  --mount=type=secret,id=NEXUS_BOT_PYPI_PASSWORD,env=UV_INDEX_PYPI_INTERNAL_PASSWORD \
+  uv sync --frozen --no-dev
+
+# Runtime stage
+FROM public.ecr.aws/x2m9r8s3/chainguard/python:3.13.5
+
+# Re-declare UID and GID for this stage
+ARG UID=65532
+ARG GID=65532
+
+# Switch to unprivileged user
+USER ${UID}:${GID}
+
+# Copy over the built app (including .venv)
+COPY --from=builder --chown=${UID}:${GID} /app /app
+
+# Prepend virtualenv’s bin to PATH
+ENV PATH="/app/.venv/bin:$PATH"
+
+ENTRYPOINT ["python", "-m", "flow.main"]
+

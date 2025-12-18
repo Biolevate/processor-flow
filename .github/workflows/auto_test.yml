@@ -1,0 +1,44 @@
+name: Python application test
+
+on:
+  push:
+    branches:
+      - "release/**"
+      - main
+  pull_request:
+    branches:
+      - "**"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          # Install a specific version of uv.
+          # version: "0.5.4"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install the project
+        run: uv sync --locked --all-extras --group test
+        env:
+          UV_INDEX_PYPI_INTERNAL_USERNAME: "bot-pypi"
+          UV_INDEX_PYPI_INTERNAL_PASSWORD: ${{ secrets.NEXUS_BOT_PYPI_PASSWORD }}
+
+      - name: Run tests with coverage
+        run: |
+          uv run coverage run -m pytest
+          uv run coverage report
+          uv run coverage xml

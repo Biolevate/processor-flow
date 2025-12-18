@@ -1,0 +1,15 @@
+{
+  "version": "2.12",
+  "release_date": "2024-07-16",
+  "name": "processor-forge",
+  "description": "",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/biolevate/processor-forge"
+  },
+  "environment": {},
+  "build": {
+    "provider": "GitHub Actions",
+    "workflow_file": ".github/workflows/build.yml"
+  }
+}

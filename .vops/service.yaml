@@ -1,0 +1,65 @@
+version: "1.0"
+
+service:
+  name: processor-forge
+  language: python
+  command: "uv sync --all-groups --all-extras && poe serve"
+  dependencies: ["biolevate-server", "llm-service", "search-service"]
+  env:
+    - name: BOOTSTRAP_SERVERS
+      description: "Kafka bootstrap servers"
+      default_value: "localhost:9092"
+      mandatory: true
+
+    - name: ELISE_SERVER_URL
+      description: "URL for the Elise server"
+      default_value: "http://localhost:8080"
+      mandatory: true
+
+    - name: CLARK_SEARCH_SERVICE_URL
+      description: "URL for the Clark Search Service"
+      default_value: "http://localhost:4002"
+      mandatory: true
+
+    - name: CLARK_STORAGE_SERVICE_URL
+      description: "URL for the Clark Storage Service"
+      default_value: "http://localhost:4001"
+      mandatory: true
+
+    - name: BIOLEVATE_LLM_SERVICE_URL
+      description: "URL for the Biolevate LLM Service"
+      default_value: "http://localhost:4003"
+      mandatory: true
+
+    - name: HEALTHCHECK_SERVER_PORT
+      description: "Port on which the health check server listens"
+      default_value: "55002"
+      mandatory: true
+
+    - name: EXCHANGE_URL
+      description: "URL for the EAS token exchange server"
+      default_value: "http://localhost:9090"
+      mandatory: true
+
+    - name: EXCHANGE_CLIENT_ID
+      description: "Client ID for the EAS token exchange server"
+      default_value: "biolevate-worker"
+      mandatory: true
+
+    - name: EXCHANGE_CLIENT_SECRET
+      description: "Client secret for the EAS token exchange server"
+      default_value: "UgZ74dVun5KyFoL5Q46iPQm3BjMgY5q2wUuQ0AAoqzhAfhMUefQvcNN1sGj3WcPG"
+      mandatory: true
+
+  system_dependencies:
+    - name: Python
+      description: "Python runtime environment"
+      check_command: "python3 --version"
+      version_command: "python3 --version | awk '{print $2}'"
+      min_version: "3.11.9"
+
+    - name: UV
+      description: "An extremely fast Python package and project manager, written in Rust."
+      check_command: "uv --version"
+      version_command: "uv --version | awk '{print $2}'"
+      min_version: "0.5.4"

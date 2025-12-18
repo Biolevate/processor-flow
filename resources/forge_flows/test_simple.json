@@ -1,0 +1,48 @@
+{
+  "version": "1.0",
+  "flow_id": "test_simple",
+  "name": "Simple Test Flow",
+  "description": "A simple test flow with 2 dummy tasks to verify processor functionality",
+  "inputs": {
+    "parameters": {
+      "file_ids": "list",
+      "files": "list",
+      "questions": "list"
+    },
+    "defaults": {}
+  },
+  "steps": [
+    {
+      "step_id": "search_step",
+      "tasks": [
+        {
+          "task_id": "search_documents",
+          "function": "dummy_search_task",
+          "inputs": {
+            "file_ids": "$flow.file_ids",
+            "questions": "$flow.questions"
+          }
+        }
+      ]
+    },
+    {
+      "step_id": "answer_step",
+      "tasks": [
+        {
+          "task_id": "generate_answers",
+          "function": "dummy_answer_task",
+          "inputs": {
+            "questions": "$flow.questions",
+            "search_results": "$step.search_step.search_documents.search_results"
+          },
+          "export_to_flow": true
+        }
+      ]
+    }
+  ]
+}
+
+
+
+
+

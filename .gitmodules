@@ -1,0 +1,3 @@
+[submodule "py-standards"]
+	path = py-standards
+	url = git@github.com:Biolevate/py-standards.git

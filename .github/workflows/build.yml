@@ -1,0 +1,51 @@
+name: Build docker image
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_only:
+        description: 'Run build only'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: write  
+  pull-requests: write
+
+jobs:
+  generate-version:
+    runs-on: ubuntu-latest
+    outputs:
+      NEW_VERSION: ${{ steps.generate_new_version.outputs.NEW_VERSION }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+    - name: Extract short SHA
+      id: vars
+      run: echo "SHA_SHORT=$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_ENV
+    - name: generate new version
+      id: generate_new_version
+      run: |
+        APP_VERSION=$(jq -r .version version.json)
+        echo "BRANCH=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
+        if [[ "$GITHUB_REF_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          NEW_VERSION="${GITHUB_REF_NAME}"
+        else
+          NEW_VERSION=$(echo "$APP_VERSION-${{github.run_number}}-${SHA_SHORT}")
+        fi
+        echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+        echo "::set-output name=NEW_VERSION::$NEW_VERSION"
+        
+    - name: Check NEW_VERSION
+      run: echo "NEW_VERSION is ${{ steps.generate_new_version.outputs.NEW_VERSION }} on branch ${{ steps.generate_new_version.outputs.branch }}"
+
+  docker-build-and-push:
+    uses: Biolevate/biolevops-workflows/.github/workflows/docker-build-push.yml@main
+    with:
+      GITHUB_SHA: "${{ github.sha }}"
+      REPOSITORY_NAME: "processor-forge"
+      REPOSITORIES: "processor-forge,clark-protos,py-standards"
+      BUILD_ONLY: "${{ github.event.inputs.build_only == 'true' }}"
+    secrets: inherit

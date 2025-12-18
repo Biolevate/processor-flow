@@ -1,0 +1,115 @@
+[project]
+name = "flow"
+version = "0.0.1"
+description = "Processor Flow - Dynamic workflow processor using Forge flows"
+readme = "README.md"
+authors = [{ name = "Antoine de Torcy", email = "antoine@biolevate.com" }]
+requires-python = ">=3.13.3"
+classifiers = ["Private :: Do Not Upload"]
+dependencies = [
+  "japtp-rs==1.1.4",
+  "pybl-healthcheck>=0.1.5",
+  "pyclark-clients[search,storage]>=0.2.28",
+  "pyclark-protos>=0.1.7",
+  "pyclark-temporal>=0.2.2",
+  "python-dotenv>=1.0.1",
+  "temporalio>=1.13.0,<1.18.0",
+  "forge-tools>=0.1.0",
+  "elise-client>=3.1.0",
+]
+
+[dependency-groups]
+dev = [
+  "codespell >=2.2.6",
+  "deptry>=0.21.1",
+  "grpcio>=1.66.2,<=1.70.0",     #issue https://github.com/milvus-io/pymilvus/issues/2358
+  "ipykernel >=6.29.3",
+  "pip >=24.2",
+  "pip-audit >=2.7.3",
+  "poethepoet >=0.25.0",
+  "pyenv-size-analyzer ==0.1.0",
+  "pytest-asyncio >=0.23.7",
+]
+test = [
+  "coverage >=7.6.1",
+  "pytest >=8.0.1",
+  "pytest-asyncio >=0.23.7",
+  "pytest-env>=1.1.5",
+  "pytest-mock>=3.14.0",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.uv.sources]
+forge-tools = {path = "../../../clark/libs/forge-tools", editable = true}
+
+[[tool.uv.index]]
+name = "pypi-internal"
+url = "https://nexus.biolevatecloud.com/repository/pypi-internal/simple"
+
+# [tool.uv.sources]
+# pyclark-tools = { path = "../../../clark/libs/agent-tools/pyclark-tools", editable = true }
+
+[tool.poe.tasks]
+cov = "sh -c 'uv run coverage run --branch --source flow -m pytest  && coverage report'"
+covweb = "sh -c 'uv run coverage run --branch --source flow -m pytest && coverage html && open \"$(git rev-parse --show-toplevel)/htmlcov/index.html\"'"
+dep = "uv run --all-groups --all-extras deptry --known-first-party flow src/ tests/"
+jupyter = "sh -c 'uv run ipykernel install --user --name=flow-py3.13 && jupyter lab'"
+kafka = "uv run scripts/run_kafka_task.py"
+lint = "ruff ."
+serve = "uv run python -m flow.main"
+size = "uv run pyenv-size-analyze"
+spell-check = "codespell ."
+task = "uv run scripts/run_temporal_task.py"
+test = "uv run pytest -s"
+type-check = "mypy ."
+
+[tool.mypy]
+plugins = "pydantic.mypy"
+ignore_missing_imports = true
+pretty = true
+show_column_numbers = true
+show_error_codes = true
+show_error_context = true
+warn_unreachable = true
+
+[tool.pytest.ini_options]
+filterwarnings = [
+  "ignore::DeprecationWarning",
+  "ignore:Event loop is closed:RuntimeWarning",
+]
+env = [
+  "CLARK_SEARCH_SERVICE_URL=http://localhost:9999",
+  "CLARK_STORAGE_SERVICE_URL=http://localhost:9998",
+]
+
+[tool.ruff]
+extend = "./py-standards/ruff.toml"
+line-length = 140
+extend-include = ["**/experiments/*.ipynb"]
+
+[tool.ruff.lint]
+extend-select = ["ALL"] # Dangerous but will do for now
+extend-ignore = [
+  "E501",   # line too long
+  "ANN101", # missing type self
+  "TD",     # invalid todos
+  "S311",   # suspicious non cryptographic random usage
+  "FBT",    # boolean trap
+  "ERA",    # found commented-out code
+  "T20",    # (p)print found
+  "G004",   # logging statement using f-string
+  "D101",   # missing docstring in public class
+  # "PLR0913",  # too many arguments
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["E402"]
+"**/{tests,docs}/*" = ["E402", "D", "ANN", "SLF", "S101"]
+"**/examples/*" = ["PLE1142", "D103"]
+"**/experiments/*" = ["PLE1142", "D103", "I001", "SLF001", "F401", "D101"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

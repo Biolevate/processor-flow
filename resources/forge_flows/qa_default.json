@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "flow_id": "qa_default",
+  "name": "Default QA Flow",
+  "description": "Default question answering flow that mimics the original QuestionAnswering processor behavior using Forge",
+  "inputs": {
+    "parameters": {
+      "file_ids": "list",
+      "files": "list",
+      "questions": "list"
+    },
+    "defaults": {}
+  },
+  "steps": [
+    {
+      "step_id": "qa_step",
+      "tasks": [
+        {
+          "task_id": "qa_orchestrator",
+          "function": "qa_orchestrator",
+          "inputs": {
+            "file_ids": "$flow.file_ids",
+            "files": "$flow.files",
+            "questions": "$flow.questions"
+          },
+          "export_to_flow": true
+        }
+      ]
+    }
+  ]
+}
+

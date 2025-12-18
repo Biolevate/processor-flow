@@ -1,0 +1,116 @@
+application:
+  environment: "integration"
+  name: "processor-forge"
+  releaseVersion: "default-version"
+
+replicaCount: 1
+
+initContainers:
+  env:
+    temporalHttpBase: "http://temporal-frontend.temporal.svc.cluster.local:7243"
+    retentionDuration: "259200s"
+
+image:
+  repository: "396802430222.dkr.ecr.eu-west-1.amazonaws.com/"
+  application: "processor-forge"
+  side_container: "biolevops-autoscaler"
+  tag: "aca4b2208ab0071d226a23711e91834d71c78b95"
+  side_container_tag: "latest"
+  pullPolicy: Always
+  build_date: default_date
+
+resources:
+  limits:
+    cpu: "1000m"
+    memory: "4Gi"
+  requests:
+    cpu: "5m"
+    memory: "256Mi"
+
+env:
+  # Dependencies URL configuration
+  - name: ELISE_SERVER_URL
+    value: "integration-biolevate-server-service.integration-biolevate-apps.svc.cluster.local:80"
+  - name: BOOTSTRAP_SERVERS
+    value: "integration-biolevops-kafka-kafka-bootstrap.integration-biolevate-apps.svc.cluster.local:9092"
+  - name: CLARK_SEARCH_SERVICE_URL
+    value: "http://integration-search-service-service.integration-biolevate-apps.svc.cluster.local"
+  - name: BIOLEVATE_LLM_SERVICE_URL
+    value: "http://integration-llm-service-service.integration-biolevate-apps.svc.cluster.local"
+  - name: CLARK_STORAGE_SERVICE_URL
+    value: "http://integration-matsu-blobstorage-service-service.integration-biolevate-apps.svc.cluster.local"
+  - name: TEMPORAL_SERVER
+    value: "temporal-frontend.temporal.svc.cluster.local:7233"
+  - name: TEMPORAL_NAMESPACE
+    value: "integration-biolevate-apps"
+  # Global configuration
+  - name: LOG_LEVEL
+    value: "INFO"
+  - name: LOG_CONSOLE_OUTPUT
+    value: "true"
+  # Healthcheck configuration
+  - name: BIOLEVATE_SERVER_HEALTHCHECK_URL
+    value: "integration-biolevate-server-service.integration-biolevate-apps.svc.cluster.local:80"
+  - name: KAFKA_HEALTHCHECK_URL
+    value: "integration-biolevops-kafka-kafka-bootstrap.integration-biolevate-apps.svc.cluster.local:9092"
+  - name: SEARCH_HEALTHCHECK_URL
+    value: "integration-search-service-service.integration-biolevate-apps.svc.cluster.local:80"
+  - name: LLM_HEALTHCHECK_URL
+    value: "integration-llm-service-service.integration-biolevate-apps.svc.cluster.local:80"
+  - name: HEALTHCHECK_LIST
+    value: "biolevate_server,kafka,search,llm"
+  - name: EXCHANGE_URL
+    value: "http://localhost:9090"
+
+service:
+  type: ClusterIP
+  port: 8000
+
+autoscaler:
+  prometheusUrl: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
+  threshold: "10"
+  upFactor: "2"
+  downFactor: "0.9"
+  minReplicas: "1"
+  maxReplicas: "10"
+  interval: "0" # Deactivate if set to 0
+
+affinity:
+  weight: 1
+  key: "NodeType"
+  values: ["apps"]
+
+resources:
+  limits:
+    cpu: "1000m"
+    memory: "4Gi"
+  requests:
+    cpu: "5m"
+    memory: "256Mi"
+
+probes:
+  readiness:
+    enabled: true
+    httpGet:
+      path: "/healthz/readiness"
+      port: 8000
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 12
+    successThreshold: 1
+  liveness:
+    enabled: true
+    tcpSocket:
+      port: 8000
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 9
+    successThreshold: 1
+
+secrets:
+  exchange_client:
+    secretName: "zitadel-worker-credentials"
+    clientIdKey: "zitadel-worker-id"
+    clientSecretKey: "zitadel-worker-secret"
