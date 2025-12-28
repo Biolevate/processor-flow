@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 async def dummy_search_task(
     file_ids: list[str],
     questions: list[dict[str, Any]],
-    **kwargs: Any,
 ) -> dict[str, Any]:
     """Dummy search task that simulates searching documents for questions.
     
@@ -47,7 +46,6 @@ async def dummy_search_task(
 async def dummy_answer_task(
     questions: list[dict[str, Any]],
     search_results: list[dict[str, Any]],
-    **kwargs: Any,
 ) -> dict[str, Any]:
     """Dummy answer task that formats search results into answers.
     

@@ -33,7 +33,7 @@
           "function": "dummy_answer_task",
           "inputs": {
             "questions": "$flow.questions",
-            "search_results": "$step.search_step.search_documents.search_results"
+            "search_results": "$search_documents.search_results"
           },
           "export_to_flow": true
         }

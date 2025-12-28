@@ -58,29 +58,59 @@ class ForgeActivity:
         )
 
         # 3) Acquire access token to be used by Forge tools
-        access_token = await self._token_manager.get_access_token(
-            ctx.elise_refresh_token,
-        )
+        # For local testing, skip token exchange if using dummy refresh token
+        if ctx.elise_refresh_token == "dummy-refresh-token-for-local-testing":
+            access_token = "dummy-access-token-for-local-testing"
+            _logger.info("Using dummy access token for local testing")
+        else:
+            access_token = await self._token_manager.get_access_token(
+                ctx.elise_refresh_token,
+            )
 
         # 4) Execute flow with LocalRuntime
         # Import here to avoid circular dependencies and ensure forge_tools are loaded
         try:
+            from forge.models import Flow
             from forge.runtime import LocalRuntime
             from forge_tools.populated_registry import registry as forge_registry
 
-            # Merge with test tools for flows that use them
+            # Register test tools into the forge registry with explicit schemas
             from flow.test_tools import TEST_TOOLS_REGISTRY
-            combined_registry = {**forge_registry, **TEST_TOOLS_REGISTRY}
-            _logger.info("Using combined registry with %d tools", len(combined_registry))
+
+            # dummy_search_task schema
+            forge_registry.register(
+                TEST_TOOLS_REGISTRY["dummy_search_task"],
+                function_id="dummy_search_task",
+                input_schema={
+                    "file_ids": "list",
+                    "questions": "list",
+                },
+                output_schema={"search_results": "list"},
+            )
+
+            # dummy_answer_task schema
+            forge_registry.register(
+                TEST_TOOLS_REGISTRY["dummy_answer_task"],
+                function_id="dummy_answer_task",
+                input_schema={
+                    "questions": "list",
+                    "search_results": "list",
+                },
+                output_schema={"answers": "list"},
+            )
+            _logger.info("Using registry with %d tools", len(forge_registry._functions))
         except ImportError as e:
             _logger.error("Failed to import forge components: %s", e)
             _logger.error("Make sure forge and forge_tools are installed")
             return ForgeOutput(answers=[])
 
-        runtime = LocalRuntime(registry=combined_registry)
+        # Convert flow dict to Flow object (Pydantic model)
+        flow = Flow(**flow_dict)
+
+        runtime = LocalRuntime(registry=forge_registry)
         try:
             result = await runtime.run(
-                flow=flow_dict,
+                flow=flow,
                 inputs=flow_inputs,
                 access_token=access_token,
                 run_id=f"forge-{ctx.id}",
@@ -93,7 +123,7 @@ class ForgeActivity:
 
         _logger.info(
             "Forge flow %s completed with status %s",
-            flow_dict.get("flow_id", "unknown"),
+            flow.flow_id,
             result.status,
         )
 

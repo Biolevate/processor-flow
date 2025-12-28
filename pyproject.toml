@@ -13,7 +13,8 @@ dependencies = [
   "pyclark-protos>=0.1.7",
   "pyclark-temporal>=0.2.2",
   "python-dotenv>=1.0.1",
-  "temporalio>=1.13.0,<1.18.0",
+  "temporalio>=1.19.0,<1.20.0",
+  "forge>=0.1.0",
   "forge-tools>=0.1.0",
   "elise-client>=3.1.0",
 ]
@@ -42,7 +43,8 @@ test = [
 allow-direct-references = true
 
 [tool.uv.sources]
-forge-tools = {path = "../../../clark/libs/forge-tools", editable = true}
+forge = {path = "../clark/libs/forge", editable = true}
+forge-tools = {path = "../clark/libs/forge-tools", editable = true}
 
 [[tool.uv.index]]
 name = "pypi-internal"

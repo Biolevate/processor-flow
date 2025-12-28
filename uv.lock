@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.13.3"
 
 [[package]]
@@ -779,6 +779,7 @@ version = "0.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "elise-client" },
+    { name = "forge" },
     { name = "forge-tools" },
     { name = "japtp-rs" },
     { name = "pybl-healthcheck" },
@@ -812,14 +813,15 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "elise-client", specifier = ">=3.1.0" },
-    { name = "forge-tools", editable = "../../../clark/libs/forge-tools" },
+    { name = "forge", editable = "../clark/libs/forge" },
+    { name = "forge-tools", editable = "../clark/libs/forge-tools" },
     { name = "japtp-rs", specifier = "==1.1.4" },
     { name = "pybl-healthcheck", specifier = ">=0.1.5" },
     { name = "pyclark-clients", extras = ["search", "storage"], specifier = ">=0.2.28" },
     { name = "pyclark-protos", specifier = ">=0.1.7" },
     { name = "pyclark-temporal", specifier = ">=0.2.2" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
-    { name = "temporalio", specifier = ">=1.13.0,<1.18.0" },
+    { name = "temporalio", specifier = ">=1.19.0,<1.20.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -878,16 +880,21 @@ wheels = [
 [[package]]
 name = "forge"
 version = "0.2.0"
-source = { editable = "../../../clark/libs/forge" }
+source = { editable = "../clark/libs/forge" }
 dependencies = [
     { name = "fastmcp" },
     { name = "lazy-imports" },
     { name = "mcp" },
     { name = "networkx" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc" },
+    { name = "opentelemetry-sdk" },
+    { name = "pybl-llm-sdk" },
     { name = "pybl-logging" },
+    { name = "pyclark-temporal" },
     { name = "pydantic" },
     { name = "redis" },
-    { name = "temporalio" },
+    { name = "temporalio", extra = ["opentelemetry"] },
 ]
 
 [package.metadata]
@@ -896,10 +903,15 @@ requires-dist = [
     { name = "lazy-imports", specifier = ">=1.0.1" },
     { name = "mcp", specifier = ">=1.9.4" },
     { name = "networkx", specifier = "==3.3" },
+    { name = "opentelemetry-api", specifier = ">=1.20.0" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.20.0" },
+    { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
+    { name = "pybl-llm-sdk", specifier = ">=1.4.7" },
     { name = "pybl-logging", specifier = ">=0.1.4" },
+    { name = "pyclark-temporal", specifier = ">=0.2.6" },
     { name = "pydantic" },
     { name = "redis", specifier = ">=5.2.1" },
-    { name = "temporalio", specifier = ">=1.9.0" },
+    { name = "temporalio", extras = ["opentelemetry"], specifier = ">=1.17.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -919,7 +931,7 @@ test = [
 [[package]]
 name = "forge-tools"
 version = "0.1.0"
-source = { editable = "../../../clark/libs/forge-tools" }
+source = { editable = "../clark/libs/forge-tools" }
 dependencies = [
     { name = "elise-client" },
     { name = "forge" },
@@ -930,21 +942,25 @@ dependencies = [
     { name = "pyclark-clients" },
     { name = "pyclark-core" },
     { name = "pyclark-protos" },
+    { name = "pyclark-temporal" },
     { name = "pydantic" },
+    { name = "temporalio", extra = ["opentelemetry"] },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "elise-client", specifier = ">=3.1.14" },
-    { name = "forge", editable = "../../../clark/libs/forge" },
+    { name = "forge", editable = "../clark/libs/forge" },
     { name = "omegaconf", specifier = ">=2.3.0" },
     { name = "pybl-llm-client", specifier = ">=2.4.1" },
     { name = "pybl-llm-sdk", specifier = ">=1.4.7" },
     { name = "pybl-logging", specifier = ">=0.1.4" },
     { name = "pyclark-clients", specifier = ">=0.2.31" },
-    { name = "pyclark-core", editable = "../../../clark/libs/core/pyclark-core" },
+    { name = "pyclark-core", editable = "../clark/libs/core/pyclark-core" },
     { name = "pyclark-protos", specifier = ">=0.1.8" },
+    { name = "pyclark-temporal", editable = "../clark/libs/temporal/pyclark-temporal" },
     { name = "pydantic" },
+    { name = "temporalio", extras = ["opentelemetry"], specifier = ">=1.17.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -1066,6 +1082,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/9a/c8/dd58967d119baab745caec2f9d853297cec1989ec1d63f677d3880632b88/gitpython-3.1.45.tar.gz", hash = "sha256:85b0ee964ceddf211c41b9f27a49086010a190fd8132a24e21f362a4b36a791c", size = 215076, upload-time = "2025-07-24T03:45:54.871Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/01/61/d4b89fec821f72385526e1b9d9a3a0385dda4a72b206d28049e2c7cd39b8/gitpython-3.1.45-py3-none-any.whl", hash = "sha256:8908cb2e02fb3b93b7eb0f2827125cb699869470432cc885f019b8fd0fccff77", size = 208168, upload-time = "2025-07-24T03:45:52.517Z" },
+]
+
+[[package]]
+name = "googleapis-common-protos"
+version = "1.72.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e5/7b/adfd75544c415c487b33061fe7ae526165241c1ea133f9a9125a56b39fd8/googleapis_common_protos-1.72.0.tar.gz", hash = "sha256:e55a601c1b32b52d7a3e65f43563e2aa61bcd737998ee672ac9b951cd49319f5", size = 147433, upload-time = "2025-11-06T18:29:24.087Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c4/ab/09169d5a4612a5f92490806649ac8d41e3ec9129c636754575b3553f4ea4/googleapis_common_protos-1.72.0-py3-none-any.whl", hash = "sha256:4299c5a82d5ae1a9702ada957347726b167f9f8d1fc352477702a1e851ff4038", size = 297515, upload-time = "2025-11-06T18:29:13.14Z" },
 ]
 
 [[package]]
@@ -1611,8 +1639,8 @@ wheels = [
 
 [[package]]
 name = "matsu-sdk"
-version = "1.5.14"
-source = { editable = "../../../clark/libs/matsu/sdk" }
+version = "1.5.15"
+source = { editable = "../clark/libs/matsu/sdk" }
 dependencies = [
     { name = "pandas" },
     { name = "protobuf" },
@@ -1623,7 +1651,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "pandas", specifier = ">=2.2.2" },
-    { name = "protobuf", specifier = ">=5.27.2,<6" },
+    { name = "protobuf", specifier = ">=5.27.2,<7.0" },
     { name = "pydantic", specifier = ">=2.8.2" },
     { name = "pydantic-settings", specifier = ">=2.5.2" },
 ]
@@ -1632,13 +1660,13 @@ requires-dist = [
 dev = [
     { name = "codespell", specifier = ">=2.2.6" },
     { name = "deptry", specifier = ">=0.21.1" },
-    { name = "grpcio-tools", specifier = ">=1.66.2,<1.70.0" },
+    { name = "grpcio-tools", specifier = ">=1.66.2" },
     { name = "pre-commit", specifier = ">=3.7.0" },
     { name = "ruff", specifier = ">=0.2.2" },
 ]
 test = [
     { name = "coverage", specifier = ">=7.4.3" },
-    { name = "pyclark-protos", editable = "../../../clark/proto/legacy/gen" },
+    { name = "pyclark-protos", editable = "../clark/proto/legacy/gen" },
     { name = "pytest", specifier = ">=8.2.2" },
     { name = "pytest-asyncio", specifier = ">=0.23.6" },
     { name = "pytest-mock", specifier = ">=3.12.0" },
@@ -1924,15 +1952,84 @@ wheels = [
 
 [[package]]
 name = "opentelemetry-api"
-version = "1.38.0"
+version = "1.39.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "importlib-metadata" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/08/d8/0f354c375628e048bd0570645b310797299754730079853095bf000fba69/opentelemetry_api-1.38.0.tar.gz", hash = "sha256:f4c193b5e8acb0912b06ac5b16321908dd0843d75049c091487322284a3eea12", size = 65242, upload-time = "2025-10-16T08:35:50.25Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/97/b9/3161be15bb8e3ad01be8be5a968a9237c3027c5be504362ff800fca3e442/opentelemetry_api-1.39.1.tar.gz", hash = "sha256:fbde8c80e1b937a2c61f20347e91c0c18a1940cecf012d62e65a7caf08967c9c", size = 65767, upload-time = "2025-12-11T13:32:39.182Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ae/a2/d86e01c28300bd41bab8f18afd613676e2bd63515417b77636fc1add426f/opentelemetry_api-1.38.0-py3-none-any.whl", hash = "sha256:2891b0197f47124454ab9f0cf58f3be33faca394457ac3e09daba13ff50aa582", size = 65947, upload-time = "2025-10-16T08:35:30.23Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/df/d3f1ddf4bb4cb50ed9b1139cc7b1c54c34a1e7ce8fd1b9a37c0d1551a6bd/opentelemetry_api-1.39.1-py3-none-any.whl", hash = "sha256:2edd8463432a7f8443edce90972169b195e7d6a05500cd29e6d13898187c9950", size = 66356, upload-time = "2025-12-11T13:32:17.304Z" },
+]
+
+[[package]]
+name = "opentelemetry-exporter-otlp-proto-common"
+version = "1.39.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "opentelemetry-proto" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e9/9d/22d241b66f7bbde88a3bfa6847a351d2c46b84de23e71222c6aae25c7050/opentelemetry_exporter_otlp_proto_common-1.39.1.tar.gz", hash = "sha256:763370d4737a59741c89a67b50f9e39271639ee4afc999dadfe768541c027464", size = 20409, upload-time = "2025-12-11T13:32:40.885Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8c/02/ffc3e143d89a27ac21fd557365b98bd0653b98de8a101151d5805b5d4c33/opentelemetry_exporter_otlp_proto_common-1.39.1-py3-none-any.whl", hash = "sha256:08f8a5862d64cc3435105686d0216c1365dc5701f86844a8cd56597d0c764fde", size = 18366, upload-time = "2025-12-11T13:32:20.2Z" },
+]
+
+[[package]]
+name = "opentelemetry-exporter-otlp-proto-grpc"
+version = "1.39.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "googleapis-common-protos" },
+    { name = "grpcio" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-exporter-otlp-proto-common" },
+    { name = "opentelemetry-proto" },
+    { name = "opentelemetry-sdk" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/53/48/b329fed2c610c2c32c9366d9dc597202c9d1e58e631c137ba15248d8850f/opentelemetry_exporter_otlp_proto_grpc-1.39.1.tar.gz", hash = "sha256:772eb1c9287485d625e4dbe9c879898e5253fea111d9181140f51291b5fec3ad", size = 24650, upload-time = "2025-12-11T13:32:41.429Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/81/a3/cc9b66575bd6597b98b886a2067eea2693408d2d5f39dad9ab7fc264f5f3/opentelemetry_exporter_otlp_proto_grpc-1.39.1-py3-none-any.whl", hash = "sha256:fa1c136a05c7e9b4c09f739469cbdb927ea20b34088ab1d959a849b5cc589c18", size = 19766, upload-time = "2025-12-11T13:32:21.027Z" },
+]
+
+[[package]]
+name = "opentelemetry-proto"
+version = "1.39.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/49/1d/f25d76d8260c156c40c97c9ed4511ec0f9ce353f8108ca6e7561f82a06b2/opentelemetry_proto-1.39.1.tar.gz", hash = "sha256:6c8e05144fc0d3ed4d22c2289c6b126e03bcd0e6a7da0f16cedd2e1c2772e2c8", size = 46152, upload-time = "2025-12-11T13:32:48.681Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/51/95/b40c96a7b5203005a0b03d8ce8cd212ff23f1793d5ba289c87a097571b18/opentelemetry_proto-1.39.1-py3-none-any.whl", hash = "sha256:22cdc78efd3b3765d09e68bfbd010d4fc254c9818afd0b6b423387d9dee46007", size = 72535, upload-time = "2025-12-11T13:32:33.866Z" },
+]
+
+[[package]]
+name = "opentelemetry-sdk"
+version = "1.39.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-semantic-conventions" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/eb/fb/c76080c9ba07e1e8235d24cdcc4d125ef7aa3edf23eb4e497c2e50889adc/opentelemetry_sdk-1.39.1.tar.gz", hash = "sha256:cf4d4563caf7bff906c9f7967e2be22d0d6b349b908be0d90fb21c8e9c995cc6", size = 171460, upload-time = "2025-12-11T13:32:49.369Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7c/98/e91cf858f203d86f4eccdf763dcf01cf03f1dae80c3750f7e635bfa206b6/opentelemetry_sdk-1.39.1-py3-none-any.whl", hash = "sha256:4d5482c478513ecb0a5d938dcc61394e647066e0cc2676bee9f3af3f3f45f01c", size = 132565, upload-time = "2025-12-11T13:32:35.069Z" },
+]
+
+[[package]]
+name = "opentelemetry-semantic-conventions"
+version = "0.60b1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "opentelemetry-api" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/91/df/553f93ed38bf22f4b999d9be9c185adb558982214f33eae539d3b5cd0858/opentelemetry_semantic_conventions-0.60b1.tar.gz", hash = "sha256:87c228b5a0669b748c76d76df6c364c369c28f1c465e50f661e39737e84bc953", size = 137935, upload-time = "2025-12-11T13:32:50.487Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7a/5e/5958555e09635d09b75de3c4f8b9cae7335ca545d77392ffe7331534c402/opentelemetry_semantic_conventions-0.60b1-py3-none-any.whl", hash = "sha256:9fa8c8b0c110da289809292b0591220d3a7b53c1526a23021e977d68597893fb", size = 219982, upload-time = "2025-12-11T13:32:36.955Z" },
 ]
 
 [[package]]
@@ -2416,8 +2513,8 @@ storage = [
 
 [[package]]
 name = "pyclark-core"
-version = "1.2.17"
-source = { editable = "../../../clark/libs/core/pyclark-core" }
+version = "1.2.18"
+source = { editable = "../clark/libs/core/pyclark-core" }
 dependencies = [
     { name = "matsu-sdk" },
     { name = "pyclark-protos" },
@@ -2427,8 +2524,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "matsu-sdk", editable = "../../../clark/libs/matsu/sdk" },
-    { name = "pyclark-protos", editable = "../../../clark/proto/legacy/gen" },
+    { name = "matsu-sdk", editable = "../clark/libs/matsu/sdk" },
+    { name = "pyclark-protos", editable = "../clark/proto/legacy/gen" },
     { name = "pydantic", specifier = ">=2.10.2" },
     { name = "tiktoken", specifier = ">=0.8.0" },
 ]
@@ -2436,7 +2533,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "deptry", specifier = ">=0.21.1" },
-    { name = "grpcio-tools", specifier = ">=1.66.2,<1.70.0" },
+    { name = "grpcio-tools", specifier = ">=1.66.2" },
     { name = "ipykernel", specifier = ">=6.29.5" },
 ]
 test = [
@@ -2448,8 +2545,8 @@ test = [
 
 [[package]]
 name = "pyclark-protos"
-version = "0.1.8"
-source = { editable = "../../../clark/proto/legacy/gen" }
+version = "0.1.9"
+source = { editable = "../clark/proto/legacy/gen" }
 dependencies = [
     { name = "grpcio-tools" },
     { name = "protobuf" },
@@ -2457,14 +2554,14 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "grpcio-tools", specifier = ">=1.66.2,<1.70.0" },
-    { name = "protobuf", specifier = ">=5.27.2,<6" },
+    { name = "grpcio-tools", specifier = ">=1.66.2" },
+    { name = "protobuf", specifier = ">=5.27.2,<7.0" },
 ]
 
 [[package]]
 name = "pyclark-temporal"
-version = "0.2.4"
-source = { registry = "https://nexus.biolevatecloud.com/repository/pypi-internal/simple" }
+version = "0.2.6"
+source = { editable = "../clark/libs/temporal/pyclark-temporal" }
 dependencies = [
     { name = "aiokafka" },
     { name = "japtp-rs" },
@@ -2473,9 +2570,23 @@ dependencies = [
     { name = "pyjwt" },
     { name = "temporalio" },
 ]
-sdist = { url = "https://nexus.biolevatecloud.com/repository/pypi-internal/packages/pyclark-temporal/0.2.4/pyclark_temporal-0.2.4.tar.gz", hash = "sha256:deae9d5f3fa78654f6211a1ab48bbfbf2edb292564581afb306c0afff49b4656" }
-wheels = [
-    { url = "https://nexus.biolevatecloud.com/repository/pypi-internal/packages/pyclark-temporal/0.2.4/pyclark_temporal-0.2.4-py3-none-any.whl", hash = "sha256:cb2d6b19272cd9835cbbb75c63927708c078f6649c835c11a710ca5382177b3e" },
+
+[package.metadata]
+requires-dist = [
+    { name = "aiokafka", specifier = ">=0.12.0" },
+    { name = "japtp-rs", specifier = "==1.1.4" },
+    { name = "opentelemetry-api", specifier = ">=1.35.0" },
+    { name = "pyclark-protos", editable = "../clark/proto/legacy/gen" },
+    { name = "pyjwt", specifier = ">=2.10.1" },
+    { name = "temporalio", specifier = ">=1.19.0,<1.20" },
+]
+
+[package.metadata.requires-dev]
+test = [
+    { name = "pytest", specifier = ">=8.4.1" },
+    { name = "pytest-anyio", specifier = ">=0.0.0" },
+    { name = "pytest-asyncio", specifier = ">=1.1.0" },
+    { name = "testcontainers", extras = ["kafka"], specifier = ">=4.12.0" },
 ]
 
 [[package]]
@@ -3154,7 +3265,7 @@ wheels = [
 
 [[package]]
 name = "temporalio"
-version = "1.17.0"
+version = "1.19.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "nexus-rpc" },
@@ -3162,13 +3273,18 @@ dependencies = [
     { name = "types-protobuf" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/de/a7/622047cb731a104e455687793d724ed143925e9ea14b522ad5ce224e8d7f/temporalio-1.17.0.tar.gz", hash = "sha256:1ac8f1ade36fafe7110b979b6a16d89203e1f4fb9c874f2fe3b5d83c17b13244", size = 1734067, upload-time = "2025-09-03T01:27:05.205Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/66/9a/f6fd68e60afc67c402c0676c12baba3aa04d522c74f4123ed31b544d4159/temporalio-1.17.0-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:7a86948c74a872b7f5ecb51c5d7e8013fdda4d6a220fe92185629342e94393e7", size = 12905249, upload-time = "2025-09-03T01:26:51.93Z" },
-    { url = "https://files.pythonhosted.org/packages/8c/7e/54cffb6a0ef4853f51bcefe5a74508940bad72a4442e50b3d52379a941c3/temporalio-1.17.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:00b34a986012a355bdadf0e7eb9e57e176f2e0b1d69ea4be9eb73c21672e7fd0", size = 12539749, upload-time = "2025-09-03T01:26:54.854Z" },
-    { url = "https://files.pythonhosted.org/packages/ec/f3/e4c829eb31bdb5eb14411ce7765b4ad8087794231110ff6188497859f0e6/temporalio-1.17.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:36a84e52727e287e13777d86fa0bbda11ba6523f75a616b811cc9d799b37b98c", size = 12969855, upload-time = "2025-09-03T01:26:57.464Z" },
-    { url = "https://files.pythonhosted.org/packages/95/26/fef412e10408e35888815ac06c0c777cff1faa76157d861878d23a17edf0/temporalio-1.17.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:617f37edce3db97cc7d2ff81c145a1b92c100f6e0e42207739271d10c2eea38e", size = 13165153, upload-time = "2025-09-03T01:27:00.285Z" },
-    { url = "https://files.pythonhosted.org/packages/58/2d/01d164b78ea414f1e2554cd9959ffcf95f0c91a6d595f03128a70e433f57/temporalio-1.17.0-cp39-abi3-win_amd64.whl", hash = "sha256:f2724220fda1fd5948d917350ac25069c62624f46e53d4d6c6171baa75681145", size = 13178439, upload-time = "2025-09-03T01:27:02.855Z" },
+    { url = "https://files.pythonhosted.org/packages/3f/92/0775d831fa245d61b74db2059d5a24a04cef0532ed2c48310a5ab007de9c/temporalio-1.19.0-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:c2d6d5cad8aec56e048705aa4f0bab83fec15343757ea7acf8504f2e0c289b60", size = 13175255, upload-time = "2025-11-13T22:35:54.22Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/e1/2a818fefc0023eb132bfff1a03440bcaff154d4d97445ef88a40c23c20c8/temporalio-1.19.0-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:d85c89018cba9471ce529d90c9cee5bcc31790fd64176b9ada32cc76440f8d73", size = 12854549, upload-time = "2025-11-13T22:35:57.217Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/78/fe5c8c9b112b38e01aba845335df17a8bbfd60a434ffe3c1c4737ced40a0/temporalio-1.19.0-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:f772f0698d60f808bc3c4a055fb53e40d757fa646411845b911863eebbf0549d", size = 13237772, upload-time = "2025-11-13T22:36:00.511Z" },
+    { url = "https://files.pythonhosted.org/packages/d9/82/be0fd31119651f518f8db8685fd61976d9d5bbecf3b562d51f13a6442a17/temporalio-1.19.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f706c8f49771daf342ac8daa8ed07f4124fae943177f9feef458a1255aee717c", size = 13374621, upload-time = "2025-11-13T22:36:03.431Z" },
+    { url = "https://files.pythonhosted.org/packages/d8/94/18f6ae06ffd91507ded9111af1041146a5ba4b56e9256520c5ce82629fc4/temporalio-1.19.0-cp310-abi3-win_amd64.whl", hash = "sha256:162459c293553be39994f20c635a132f7332ae71bd7ba4042f8473701fcf1c7c", size = 14256891, upload-time = "2025-11-13T22:36:06.778Z" },
+]
+
+[package.optional-dependencies]
+opentelemetry = [
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
 ]
 
 [[package]]
