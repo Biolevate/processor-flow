@@ -56,22 +56,82 @@ class InputMapper:
         questions: list[Question],
         extra_params: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        """Build canonical flow inputs.
-
-        Default convention for QA-like flows:
+        """Build canonical flow inputs for qa_default flow.
+        
+        For qa_default flow:
+          - file_ids: list[str]
+          - query: str (first question)
+          - previous_answers: list (from question dependencies)
+        
+        For other flows (test_simple, etc.):
           - file_ids: list[str]
           - files: list[dict]
           - questions: list[dict]
-          - extra_params: dict[str, str]
         """
         file_ids = [f.id for f in files]
+        
+        # For qa_default flow: single query mode
+        query = questions[0].question if questions else ""
+        
+        # Build previous_answers from dependencies if needed
+        previous_answers = []
+        if questions and questions[0].inputQuestionIds:
+            # TODO: Retrieve answers from dependent questions
+            # For now, leave empty
+            pass
+        
         inputs: dict[str, Any] = {
             "file_ids": file_ids,
+            "query": query,
+            "previous_answers": previous_answers,
+            # Keep legacy format for backwards compatibility
             "files": InputMapper.files_to_dicts(files),
             "questions": InputMapper.questions_to_dicts(questions),
         }
+        
         if extra_params:
             inputs["extra_params"] = dict(extra_params)
+        
+        return inputs
+
+    @staticmethod
+    def build_custom_workflow_inputs(
+        first_source_files: list[FileMetaData],
+        second_source_files: list[FileMetaData],
+        questions: list[Question],
+        additional_params: dict[str, Any] | None = None,
+        collection_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Build flow inputs with custom workflow convention.
+        
+        Standard CustomWorkflow inputs:
+        - first_source_file_ids: list[str]
+        - second_source_file_ids: list[str]
+        - query: str (first question)
+        - questions: list[dict]
+        - previous_answers: list
+        - collection_id: str | None (optional output collection)
+        - **additional_params: from additional_inputs JSON
+        
+        Flows MUST use these standard input names.
+        """
+        inputs: dict[str, Any] = {
+            "first_source_file_ids": [f.id for f in first_source_files],
+            "second_source_file_ids": [f.id for f in second_source_files],
+            "query": questions[0].question if questions else "",
+            "questions": InputMapper.questions_to_dicts(questions),
+            "previous_answers": [],
+        }
+        
+        # Add collection_id if provided
+        if collection_id:
+            inputs["collection_id"] = collection_id
+        
+        # Merge additional params from additional_inputs
+        if additional_params:
+            logger.info("Merging additional params into flow inputs: %s", additional_params)
+            inputs.update(additional_params)
+        
         return inputs
 
 
@@ -84,21 +144,65 @@ class OutputMapper:
         original_questions: list[Question],
     ) -> list[QuestionAnswer]:
         """Convert flow outputs → QuestionAnswer list.
-
-        Contract for QA-like flows:
-          flow.outputs["answers"] is a list of dicts:
-            {
-              "id": ...,
-              "question": ...,
-              "expectedAnswer": ...,
-              "sourcedContent": ...,
-              "explanation": ...,
-              "answerValidity": float,
-              "validityExplanation": str,
-              "annotations": [...],
-              "inputQuestionIds": [...],
-            }
+        
+        Supports multiple output formats:
+        1. qa_default flow (qa_agent or qa_agent_with_full_content)
+        2. Legacy answers format
         """
+        # Case 1: qa_default flow output
+        if "qa_agent" in flow_outputs or "qa_agent_with_full_content" in flow_outputs:
+            return OutputMapper._handle_qa_default(flow_outputs, original_questions)
+        
+        # Case 2: Legacy format
+        return OutputMapper._handle_legacy_format(flow_outputs, original_questions)
+    
+    @staticmethod
+    def _handle_qa_default(
+        flow_outputs: dict[str, Any],
+        original_questions: list[Question],
+    ) -> list[QuestionAnswer]:
+        """Handle output from qa_default flow (single question)."""
+        # Get result from the appropriate step
+        result = flow_outputs.get("qa_agent") or flow_outputs.get("qa_agent_with_full_content")
+        if not result:
+            logger.warning("No qa_agent result found in flow outputs")
+            return []
+        
+        # Extract final_result from looping_agent
+        final_result = result.get("final_result", {})
+        
+        # Create QuestionAnswer for the first question
+        q = original_questions[0] if original_questions else None
+        if not q:
+            logger.warning("No original questions provided")
+            return []
+        
+        # Extract content IDs and join them
+        justifying_ids = final_result.get("justifying_contents_ids", [])
+        sourced_content = ", ".join(justifying_ids) if justifying_ids else ""
+        
+        qa = QuestionAnswer(
+            id=q.id,
+            question=q.question,
+            expectedAnswer=final_result.get("answer", ""),
+            sourcedContent=sourced_content,
+            explanation=final_result.get("answer_explanation", ""),
+            answerValidity=1.0,  # TODO: calculate from quality metrics
+            validityExplanation="",
+        )
+        
+        # Add dependencies
+        for dep in q.inputQuestionIds:
+            qa.inputQuestionIds.append(dep)
+        
+        return [qa]
+    
+    @staticmethod
+    def _handle_legacy_format(
+        flow_outputs: dict[str, Any],
+        original_questions: list[Question],
+    ) -> list[QuestionAnswer]:
+        """Handle legacy answers format."""
         raw_answers = flow_outputs.get("answers") or []
         answers: list[QuestionAnswer] = []
 
@@ -125,7 +229,6 @@ class OutputMapper:
             # Optional: annotations as list[dict]
             for ann in raw.get("annotations") or []:
                 try:
-                    # If ann is already a proto dict, this may work; else adapt as needed
                     qa.annotations.add(**ann)
                 except TypeError:
                     logger.debug("Skipping incompatible annotation: %r", ann)
