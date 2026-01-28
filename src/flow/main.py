@@ -3,16 +3,21 @@ import logging
 import os
 import sys
 
-from clark.temporal.token_manager import TokenManager
 from clark.temporal.worker import TemporalWorkerConfig
 from dotenv import load_dotenv
-from japtp_rs import AsyncEasTokenExchangeClient
+from elise_client.api_client import ApiClient
+from elise_client.configuration import Configuration
 from pybl_healthcheck import HealthCheck
 
-from flow.activity import ForgeActivity
+# Import protobuf modules to register them in the symbol database
+# Legacy forge proto (kept for reference)
+# from clark_protos.processors import forge_pb2  # noqa: F401
+from clark_protos.processors import customWorkflow_pb2  # noqa: F401
+
+from flow.activity import CustomWorkflowActivity
 from flow.workflow import (
-    FORGE_WORKFLOW_TASK_QUEUE,
-    TemporalForgeWorkflow,
+    CUSTOM_WORKFLOW_TASK_QUEUE,
+    TemporalCustomWorkflowWorkflow,
 )
 
 _logger = logging.getLogger(__name__)
@@ -31,6 +36,8 @@ def setup_logger() -> None:
     logging.getLogger("clark.temporal").setLevel(logging.INFO)
     logging.getLogger("forge").setLevel(logging.DEBUG)
     logging.getLogger("forge_tools").setLevel(logging.INFO)
+    logging.getLogger("flow").setLevel(logging.INFO)
+    logging.getLogger("temporalio.activity").setLevel(logging.INFO)
 
 
 async def shutdown(*tasks: asyncio.Task[object], grace: float = _GRACE_SEC) -> None:
@@ -43,49 +50,46 @@ async def shutdown(*tasks: asyncio.Task[object], grace: float = _GRACE_SEC) -> N
 
 async def main() -> None:
     setup_logger()
-    _logger.info("Starting ProcessorForge Worker")
+    _logger.info("Starting ProcessorCustomWorkflow Worker")
 
     load_dotenv()
 
     healthcheck = HealthCheck()
     health_task = asyncio.create_task(healthcheck.start_http_server())
 
-    # JAPTP EAS token exchange client (JA -> IAT)
-    eas_client = AsyncEasTokenExchangeClient(
-        base_url=os.getenv("EXCHANGE_URL", ""),
-        client_id=os.getenv("EXCHANGE_CLIENT_ID", ""),
-        client_secret=os.getenv("EXCHANGE_CLIENT_SECRET", ""),
-    )
-
-    token_manager = TokenManager.new_iat(eas_client)
-
     # Important: import forge_tools.populated_registry to register all tools
     try:
         import forge_tools.populated_registry  # noqa: F401
+
         _logger.info("Successfully loaded forge_tools.populated_registry")
     except ImportError as e:
         _logger.error("Failed to import forge_tools.populated_registry: %s", e)
         _logger.error("Make sure forge_tools is installed")
         raise
 
-    forge_activity = ForgeActivity(token_manager=token_manager)
+    async with ApiClient(
+        configuration=Configuration(
+            host=os.getenv("ELISE_SERVER_URL", "http://localhost:8080"),
+        ),
+    ) as elise_api_client:
+        custom_workflow_activity = CustomWorkflowActivity()
 
-    worker = await (
-        TemporalWorkerConfig.from_env()
-        .with_task_queue(FORGE_WORKFLOW_TASK_QUEUE)
-        .with_workflows(TemporalForgeWorkflow)
-        .with_activities(forge_activity.process)
-        .into_worker()
-    )
+        worker = await (
+            TemporalWorkerConfig.from_env()
+            .with_task_queue(CUSTOM_WORKFLOW_TASK_QUEUE)
+            .with_workflows(TemporalCustomWorkflowWorkflow)
+            .with_activities(custom_workflow_activity.process)
+            .into_worker()
+        )
 
-    worker_task = asyncio.create_task(worker.run())
+        worker_task = asyncio.create_task(worker.run())
 
-    try:
-        await worker_task
-    except asyncio.CancelledError:
-        await shutdown(worker_task, health_task, grace=_GRACE_SEC)
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            await shutdown(worker_task, health_task, grace=_GRACE_SEC)
 
-    _logger.info("Shutdown complete")
+        _logger.info("Shutdown complete")
 
 
 if __name__ == "__main__":

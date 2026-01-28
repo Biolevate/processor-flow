@@ -71,6 +71,7 @@ class CustomWorkflowActivity:
 
         # 3) Prepare authentication for Forge tools
         elise_api_headers = dict(ctx.headers) if ctx.headers else {}
+        
         _logger.info("Authentication headers available: %s", list(elise_api_headers.keys()))
 
         # 4) Execute flow with LocalRuntime

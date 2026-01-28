@@ -1,32 +1,92 @@
 {
   "version": "1.0",
   "flow_id": "qa_default",
-  "name": "Default QA Flow",
-  "description": "Default question answering flow that mimics the original QuestionAnswering processor behavior using Forge",
+  "name": "Processor QA Default Flow",
   "inputs": {
     "parameters": {
       "file_ids": "list",
-      "files": "list",
-      "questions": "list"
+      "query": "str",
+      "previous_answers": "list"
     },
-    "defaults": {}
+    "defaults": {
+      "previous_answers": []
+    }
   },
   "steps": [
     {
-      "step_id": "qa_step",
+      "step_id": "fits_in_context",
+      "name": null,
       "tasks": [
         {
-          "task_id": "qa_orchestrator",
-          "function": "qa_orchestrator",
+          "task_id": "fits_in_context",
+          "name": null,
+          "function": "fits_in_single_call_flow",
+          "inputs": {
+            "file_ids": "$flow.file_ids"
+          },
+          "export_to_flow": false,
+          "map": null,
+          "when": null,
+          "on_skip": "continue",
+          "metadata": {}
+        }
+      ],
+      "when": null
+    },
+    {
+      "step_id": "qa_agent",
+      "name": null,
+      "tasks": [
+        {
+          "task_id": "qa_agent",
+          "name": null,
+          "function": "qa_agent_flow",
           "inputs": {
             "file_ids": "$flow.file_ids",
-            "files": "$flow.files",
-            "questions": "$flow.questions"
+            "query": "$flow.query",
+            "previous_answers": "$flow.previous_answers"
           },
-          "export_to_flow": true
+          "export_to_flow": true,
+          "map": null,
+          "when": {
+            "kind": "reference",
+            "ref": "$fits_in_context.fits_in_context",
+            "op": "==",
+            "value": false
+          },
+          "on_skip": "continue",
+          "metadata": {}
         }
-      ]
+      ],
+      "when": null
+    },
+    {
+      "step_id": "qa_agent_with_full_content",
+      "name": null,
+      "tasks": [
+        {
+          "task_id": "qa_agent_with_full_content",
+          "name": null,
+          "function": "qa_agent_flow_with_full_content",
+          "inputs": {
+            "file_ids": "$flow.file_ids",
+            "query": "$flow.query",
+            "previous_answers": "$flow.previous_answers"
+          },
+          "export_to_flow": true,
+          "map": null,
+          "when": null,
+          "on_skip": "continue",
+          "metadata": {}
+        }
+      ],
+      "when": {
+        "kind": "reference",
+        "ref": "$fits_in_context.fits_in_context",
+        "op": "==",
+        "value": true
+      }
     }
-  ]
+  ],
+  "metadata": {}
 }
-

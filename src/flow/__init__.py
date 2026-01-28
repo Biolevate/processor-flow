@@ -1,10 +1,10 @@
 """Processor Flow - Dynamic workflow processor using Forge flows."""
 
-from flow.activity import ForgeActivity
-from flow.workflow import FORGE_WORKFLOW_TASK_QUEUE, TemporalForgeWorkflow
+from flow.activity import CustomWorkflowActivity
+from flow.workflow import CUSTOM_WORKFLOW_TASK_QUEUE, TemporalCustomWorkflowWorkflow
 
 __all__ = [
-    "FORGE_WORKFLOW_TASK_QUEUE",
-    "ForgeActivity",
-    "TemporalForgeWorkflow",
+    "CUSTOM_WORKFLOW_TASK_QUEUE",
+    "CustomWorkflowActivity",
+    "TemporalCustomWorkflowWorkflow",
 ]

@@ -7,16 +7,15 @@ authors = [{ name = "Antoine de Torcy", email = "antoine@biolevate.com" }]
 requires-python = ">=3.13.3"
 classifiers = ["Private :: Do Not Upload"]
 dependencies = [
-  "japtp-rs==1.1.4",
   "pybl-healthcheck>=0.1.5",
   "pyclark-clients[search,storage]>=0.2.28",
-  "pyclark-protos>=0.1.7",
+  "pyclark-protos>=0.2.0",
   "pyclark-temporal>=0.2.2",
   "python-dotenv>=1.0.1",
   "temporalio>=1.19.0,<1.20.0",
   "forge>=0.1.0",
   "forge-tools>=0.1.0",
-  "elise-client>=3.1.0",
+  "elise-client>=3.1.0,<4.0.0",
 ]
 
 [dependency-groups]
