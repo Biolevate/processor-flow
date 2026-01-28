@@ -67,19 +67,11 @@ class CustomWorkflowActivity:
             second_source_files=list(task_config.second_source_files),
             questions=list(task_config.questions),
             additional_params=additional_params,
-            collection_id=task_config.collectionId if task_config.collectionId else None,
         )
 
         # 3) Prepare authentication for Forge tools
-        # TODO: Forge and forge-tools need to be updated to support elise_api_headers
-        # For now, we pass None as access_token since the new auth system uses headers
-        # The headers from ctx contain X-Biolevate-Principal and X-Biolevate-Signature
-        elise_api_headers = dict(ctx.headers)
+        elise_api_headers = dict(ctx.headers) if ctx.headers else {}
         _logger.info("Authentication headers available: %s", list(elise_api_headers.keys()))
-        _logger.warning(
-            "Forge authentication not yet updated for new elise_api_headers system. "
-            "Tools requiring Elise API access may fail until forge is updated."
-        )
 
         # 4) Execute flow with LocalRuntime
         # Import here to avoid circular dependencies and ensure forge_tools are loaded
@@ -116,29 +108,25 @@ class CustomWorkflowActivity:
         except ImportError as e:
             _logger.error("Failed to import forge components: %s", e)
             _logger.error("Make sure forge and forge_tools are installed")
-            return CustomWorkflowOutput(
-                answers=[],
-                collectionId=task_config.collectionId if task_config.collectionId else "",
-            )
+            error_msg = f"Failed to import forge components: {e}"
+            raise RuntimeError(error_msg) from e
 
         # Convert flow dict to Flow object (Pydantic model)
         flow = Flow(**flow_dict)
 
         runtime = LocalRuntime(registry=forge_registry)
         try:
-            # TODO: Update to pass elise_api_headers once forge supports it
             result = await runtime.run(
                 flow=flow,
                 inputs=flow_inputs,
                 access_token=None,  # Old auth system - not used with new headers
+                elise_api_headers=elise_api_headers,  # New header-based auth
                 run_id=f"custom-workflow-{ctx.id}",
             )
         except Exception as e:
-            _logger.error("Forge flow execution failed: %s", e)
-            return CustomWorkflowOutput(
-                answers=[],
-                collectionId=task_config.collectionId if task_config.collectionId else "",
-            )
+            _logger.exception("Forge flow execution failed: %s", e)
+            error_msg = f"Forge flow execution failed: {e}"
+            raise RuntimeError(error_msg) from e
         finally:
             await runtime.cleanup()
 
@@ -149,11 +137,9 @@ class CustomWorkflowActivity:
         )
 
         if result.status != "succeeded":
-            _logger.error("Forge flow failed: %s", result.error)
-            return CustomWorkflowOutput(
-                answers=[],
-                collectionId=task_config.collectionId if task_config.collectionId else "",
-            )
+            error_msg = f"Forge flow failed with status {result.status}: {result.error}"
+            _logger.error(error_msg)
+            raise RuntimeError(error_msg)
 
         # 5) Map outputs to QuestionAnswer list
         answers = OutputMapper.to_question_answers(
@@ -161,10 +147,7 @@ class CustomWorkflowActivity:
             original_questions=list[Question](task_config.questions),
         )
 
-        return CustomWorkflowOutput(
-            answers=answers,
-            collectionId=task_config.collectionId if task_config.collectionId else "",
-        )
+        return CustomWorkflowOutput(answers=answers)
 
     def _resolve_flow_and_params(
         self,
@@ -177,22 +160,23 @@ class CustomWorkflowActivity:
         2. Named flow via workflow_id
         3. Default flow (qa_default)
 
-        Returns:
+        Returns
+        -------
             (flow_dict, additional_params)
         """
         additional_params: dict[str, Any] = {}
-        
+
         # Parse additional_inputs
         if cfg.additional_inputs:
             try:
                 data = json.loads(cfg.additional_inputs)
                 _logger.info("Parsed additional_inputs: %s", data)
-                
+
                 # Detect if it's an inline flow (has flow_id and steps)
                 if "flow_id" in data and "steps" in data:
                     _logger.info("Using inline flow from additional_inputs")
                     return data, {}
-                
+
                 # Otherwise, treat as additional params
                 additional_params = data
                 _logger.info("Using additional_inputs as params: %s", additional_params)
@@ -203,5 +187,5 @@ class CustomWorkflowActivity:
         flow_name = cfg.workflow_id or "qa_default"
         _logger.info("Loading named flow: %s", flow_name)
         flow_dict = self._flow_loader.load_by_name(flow_name)
-        
+
         return flow_dict, additional_params
