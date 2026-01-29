@@ -11,9 +11,8 @@ from pybl_healthcheck import HealthCheck
 
 # Import protobuf modules to register them in the symbol database
 # Legacy forge proto (kept for reference)
-# from clark_protos.processors import forge_pb2  # noqa: F401
+# from clark_protos.processors import forge_pb2
 from clark_protos.processors import customWorkflow_pb2  # noqa: F401
-
 from flow.activity import CustomWorkflowActivity
 from flow.workflow import (
     CUSTOM_WORKFLOW_TASK_QUEUE,
@@ -74,7 +73,8 @@ async def main() -> None:
     ) as elise_api_client:
         custom_workflow_activity = CustomWorkflowActivity()
 
-        worker = await (
+        # Worker 1: CustomWorkflow task queue (main processor workflows)
+        custom_workflow_worker = await (
             TemporalWorkerConfig.from_env()
             .with_task_queue(CUSTOM_WORKFLOW_TASK_QUEUE)
             .with_workflows(TemporalCustomWorkflowWorkflow)
@@ -82,12 +82,39 @@ async def main() -> None:
             .into_worker()
         )
 
-        worker_task = asyncio.create_task(worker.run())
+        # Worker 2: forge-default task queue (for subflow activities)
+        # Import forge activities and workflows for subflow execution
+        from forge.adapters.temporal.activities import generate_activities
+        from forge.adapters.temporal.workflows import ForgeWorkflow, OrchestratorWorkflow
+        from forge_tools.populated_registry import registry as forge_registry
+        from temporalio.worker import FixedSizeSlotSupplier, WorkerTuner
+
+        # Create high-capacity tuner for forge worker (handles much more load)
+        forge_tuner = WorkerTuner.create_composite(
+            workflow_supplier=FixedSizeSlotSupplier(1000),
+            activity_supplier=FixedSizeSlotSupplier(1000),
+            local_activity_supplier=FixedSizeSlotSupplier(num_slots=1000),
+            nexus_supplier=FixedSizeSlotSupplier(num_slots=100),
+        )
+
+        forge_activities = generate_activities(forge_registry)
+        forge_worker = await (
+            TemporalWorkerConfig.from_env()
+            .with_task_queue("forge-default")
+            .with_tuner(forge_tuner)
+            .with_workflows(ForgeWorkflow, OrchestratorWorkflow)
+            .with_activities(*forge_activities)
+            .into_worker()
+        )
+
+        _logger.info("Running worker on CUSTOM_WORKFLOW_TASK_QUEUE and forge-default")
+        worker_task_1 = asyncio.create_task(custom_workflow_worker.run())
+        worker_task_2 = asyncio.create_task(forge_worker.run())
 
         try:
-            await worker_task
+            await asyncio.gather(worker_task_1, worker_task_2)
         except asyncio.CancelledError:
-            await shutdown(worker_task, health_task, grace=_GRACE_SEC)
+            await shutdown(worker_task_1, worker_task_2, health_task, grace=_GRACE_SEC)
 
         _logger.info("Shutdown complete")
 

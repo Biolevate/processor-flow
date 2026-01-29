@@ -4,13 +4,9 @@ import json
 import logging
 from typing import Any
 
+from forge.execution import ExecutionContext
 from temporalio import activity
 
-# Legacy forge proto (kept for reference)
-# from clark_protos.processors.forge_pb2 import (
-#     ProcessorForgeConfig as ForgeConfig,
-#     ProcessorForgeOutput as ForgeOutput,
-# )
 from clark_protos.processors.customWorkflow_pb2 import (
     ProcessorCustomWorkflowConfig as CustomWorkflowConfig,
 )
@@ -69,42 +65,22 @@ class CustomWorkflowActivity:
             additional_params=additional_params,
         )
 
-        # 3) Prepare authentication for Forge tools
+        # 3) Prepare authentication headers and execution context
         elise_api_headers = dict(ctx.headers) if ctx.headers else {}
-        
         _logger.info("Authentication headers available: %s", list(elise_api_headers.keys()))
 
-        # 4) Execute flow with LocalRuntime
+        execution_context = ExecutionContext(
+            run_id=f"custom-workflow-{ctx.id}",
+            elise_api_headers=elise_api_headers,
+        )
+
+        # 4) Execute flow with TemporalRuntime
         # Import here to avoid circular dependencies and ensure forge_tools are loaded
         try:
-            from forge.execution.runtime import LocalRuntime
+            from forge.execution.runtime import TemporalRuntime
             from forge.models import Flow
             from forge_tools.populated_registry import registry as forge_registry
 
-            # Register test tools into the forge registry with explicit schemas
-            from flow.test_tools import TEST_TOOLS_REGISTRY
-
-            # dummy_search_task schema
-            forge_registry.register(
-                TEST_TOOLS_REGISTRY["dummy_search_task"],
-                function_id="dummy_search_task",
-                input_schema={
-                    "file_ids": "list",
-                    "questions": "list",
-                },
-                output_schema={"search_results": "list"},
-            )
-
-            # dummy_answer_task schema
-            forge_registry.register(
-                TEST_TOOLS_REGISTRY["dummy_answer_task"],
-                function_id="dummy_answer_task",
-                input_schema={
-                    "questions": "list",
-                    "search_results": "list",
-                },
-                output_schema={"answers": "list"},
-            )
             _logger.info("Using registry with %d tools", len(forge_registry._functions))
         except ImportError as e:
             _logger.error("Failed to import forge components: %s", e)
@@ -115,14 +91,12 @@ class CustomWorkflowActivity:
         # Convert flow dict to Flow object (Pydantic model)
         flow = Flow(**flow_dict)
 
-        runtime = LocalRuntime(registry=forge_registry)
+        runtime = TemporalRuntime(registry=forge_registry)
         try:
             result = await runtime.run(
                 flow=flow,
                 inputs=flow_inputs,
-                access_token=None,  # Old auth system - not used with new headers
-                elise_api_headers=elise_api_headers,  # New header-based auth
-                run_id=f"custom-workflow-{ctx.id}",
+                execution_context=execution_context,
             )
         except Exception as e:
             _logger.exception("Forge flow execution failed: %s", e)

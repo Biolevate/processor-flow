@@ -975,7 +975,7 @@ wheels = [
 
 [[package]]
 name = "forge"
-version = "0.0.7"
+version = "0.0.8"
 source = { editable = "../clark/libs/forge" }
 dependencies = [
     { name = "fastmcp" },
@@ -1029,7 +1029,7 @@ test = [
 
 [[package]]
 name = "forge-tools"
-version = "0.0.12"
+version = "0.0.13"
 source = { editable = "../clark/libs/forge-tools" }
 dependencies = [
     { name = "elise-client" },
