@@ -6,7 +6,13 @@ from typing import Any
 
 from google.protobuf.json_format import MessageToDict
 
+from clark_protos.models.annotation_pb2 import (
+    Annotation,
+    AnnotationType,
+    DocumentStatement,
+)
 from clark_protos.models.file_pb2 import FileMetaData
+from clark_protos.models.position_pb2 import Bbox, Position, PositionBbox
 from clark_protos.processors.questionAnswering_pb2 import (
     Question,
     QuestionAnswer,
@@ -47,7 +53,7 @@ class InputMapper:
             # Convert protobuf messages to dicts for JSON serialization
             answer_type_dict = MessageToDict(q.answerType, preserving_proto_field_name=True) if q.HasField("answerType") else {}
             expected_answer = q.expectedAnswer if isinstance(q.expectedAnswer, str) else ""
-            
+
             qs.append(
                 {
                     "id": q.id,
@@ -215,10 +221,16 @@ class OutputMapper:
             "final_result": {
                 "answer": str,
                 "justifying_contents_ids": list[str],
-                "answer_explanation": str
+                "answer_explanation": str,
+                "annotations": list[dict] (optional - full annotation objects)
             },
             ...
         }
+        
+        OUTPUT FORMAT (matching processor_questionAnswering):
+        - sourcedContent: "[answer text](cite:id1,id2,...)"
+        - expectedAnswer: original expected answer from question input (empty if not provided)
+        - annotations: list of Annotation protos with documentStatement
         """
         final_result = flow_outputs.get("final_result")
         if not final_result or not isinstance(final_result, dict):
@@ -253,18 +265,37 @@ class OutputMapper:
 
         q = original_questions[0]
 
-        # Build QuestionAnswer
-        sourced_content = ", ".join(final_result["justifying_contents_ids"])
+        # Build sourcedContent with citation marks: [answer](cite:id1,id2,...)
+        answer_text = final_result["answer"]
+        citation_ids = list(final_result.get("citation_annotation_ids", []) or [])
+        if final_result["justifying_contents_ids"] and not citation_ids:
+            msg = (
+                "final_result.justifying_contents_ids is non-empty but citation_annotation_ids is missing. "
+                "Annotation enrichment is required for QuestionAnswering-compatible output."
+            )
+            raise ValueError(msg)
+        if citation_ids:
+            cite_refs = ",".join(citation_ids)
+            sourced_content = f"[{answer_text}](cite:{cite_refs})"
+        else:
+            sourced_content = answer_text
+
+        # Build annotations from flow output if available
+        annotations = OutputMapper._build_annotations(final_result.get("annotations", []))
 
         qa = QuestionAnswer(
             id=q.id,
             question=q.question,
-            expectedAnswer=final_result["answer"],
+            expectedAnswer=q.expectedAnswer,  # Original expected answer from input
             sourcedContent=sourced_content,
             explanation=final_result["answer_explanation"],
             answerValidity=final_result.get("answer_validity", 1.0),
             validityExplanation=final_result.get("validity_explanation", ""),
         )
+
+        # Add annotations
+        for ann in annotations:
+            qa.annotations.append(ann)
 
         # Add dependencies
         for dep in q.inputQuestionIds:
@@ -290,17 +321,27 @@ class OutputMapper:
                     "answer_explanation": str,
                     "answer_validity": float (optional, defaults to 1.0),
                     "validity_explanation": str (optional, defaults to ""),
-                    "input_question_ids": list[str] (optional)
+                    "input_question_ids": list[str] (optional),
+                    "expected_answer": str (optional - original expected answer),
+                    "annotations": list[dict] (optional - full annotation objects)
                 },
                 ...
             ]
         }
+        
+        OUTPUT FORMAT (matching processor_questionAnswering):
+        - sourcedContent: "[answer text](cite:id1,id2,...)"
+        - expectedAnswer: original expected answer from question input
+        - annotations: list of Annotation protos with documentStatement
         """
         raw_answers = flow_outputs.get("answers")
         if not isinstance(raw_answers, list):
             error_msg = "'answers' must be a list"
             logger.error(error_msg)
             raise TypeError(error_msg)
+
+        # Build a lookup for original questions by ID
+        questions_by_id = {q.id: q for q in original_questions}
 
         answers: list[QuestionAnswer] = []
 
@@ -335,19 +376,44 @@ class OutputMapper:
                 msg = f"Answer {idx}: 'answer_explanation' must be a string"
                 raise TypeError(msg)
 
-            # Build sourced content
-            sourced_content = ", ".join(raw["justifying_contents_ids"])
+            # Build sourcedContent with citation marks: [answer](cite:id1,id2,...)
+            answer_text = raw["answer"]
+            citation_ids = list(raw.get("citation_annotation_ids", []) or [])
+            if raw["justifying_contents_ids"] and not citation_ids:
+                msg = (
+                    f"Answer {idx}: justifying_contents_ids is non-empty but citation_annotation_ids is missing. "
+                    "Annotation enrichment is required for QuestionAnswering-compatible output."
+                )
+                raise ValueError(msg)
+            if citation_ids:
+                cite_refs = ",".join(citation_ids)
+                sourced_content = f"[{answer_text}](cite:{cite_refs})"
+            else:
+                sourced_content = answer_text
+
+            # Get original expected answer from the question input
+            original_q = questions_by_id.get(raw["id"])
+            expected_answer = raw.get("expected_answer", "")
+            if not expected_answer and original_q:
+                expected_answer = original_q.expectedAnswer
+
+            # Build annotations from flow output if available
+            annotations = OutputMapper._build_annotations(raw.get("annotations", []))
 
             # Create QuestionAnswer
             qa = QuestionAnswer(
                 id=raw["id"],
                 question=raw["question"],
-                expectedAnswer=raw["answer"],
+                expectedAnswer=expected_answer,
                 sourcedContent=sourced_content,
                 explanation=raw["answer_explanation"],
                 answerValidity=float(raw.get("answer_validity", 1.0)),
                 validityExplanation=raw.get("validity_explanation", ""),
             )
+
+            # Add annotations
+            for ann in annotations:
+                qa.annotations.append(ann)
 
             # Optional: dependency IDs
             for dep in raw.get("input_question_ids") or []:
@@ -361,4 +427,79 @@ class OutputMapper:
         )
 
         return answers
+
+    @staticmethod
+    def _build_annotations(raw_annotations: list[dict[str, Any]]) -> list[Annotation]:
+        """Build Annotation protos from raw annotation dicts.
+        
+        Expected format for each annotation:
+        {
+            "id": str,
+            "documentStatement": {
+                "documentId": str,
+                "documentName": str,
+                "content": str,
+                "positions": [
+                    {
+                        "bboxPosition": {
+                            "bbox": {"x0": float, "y0": float, "x1": float, "y1": float},
+                            "pageNumber": int (optional, defaults to 0)
+                        }
+                    },
+                    ...
+                ]
+            }
+        }
+        """
+        annotations: list[Annotation] = []
+
+        for raw in raw_annotations:
+            if not isinstance(raw, dict):
+                logger.warning("Skipping non-dict annotation: %s", raw)
+                continue
+
+            ann_id = raw.get("id", "")
+            doc_stmt_raw = raw.get("documentStatement", {})
+
+            if not doc_stmt_raw:
+                logger.warning("Skipping annotation without documentStatement: %s", ann_id)
+                continue
+
+            # Build positions
+            positions: list[Position] = []
+            for pos_raw in doc_stmt_raw.get("positions", []):
+                bbox_pos_raw = pos_raw.get("bboxPosition", {})
+                bbox_raw = bbox_pos_raw.get("bbox", {})
+
+                if bbox_raw:
+                    bbox = Bbox(
+                        x0=float(bbox_raw.get("x0", 0)),
+                        y0=float(bbox_raw.get("y0", 0)),
+                        x1=float(bbox_raw.get("x1", 0)),
+                        y1=float(bbox_raw.get("y1", 0)),
+                    )
+                    position_bbox = PositionBbox(
+                        bbox=bbox,
+                        page_number=int(bbox_pos_raw.get("pageNumber", 0)),
+                    )
+                    positions.append(Position(bboxPosition=position_bbox))
+
+            # Build DocumentStatement
+            doc_stmt = DocumentStatement(
+                documentId=doc_stmt_raw.get("documentId", ""),
+                documentName=doc_stmt_raw.get("documentName", ""),
+                content=doc_stmt_raw.get("content", ""),
+            )
+            for pos in positions:
+                doc_stmt.positions.append(pos)
+
+            # Build Annotation
+            annotation = Annotation(
+                id=ann_id,
+                type=AnnotationType.DOCUMENT_STATEMENT,
+                documentStatement=doc_stmt,
+            )
+            annotations.append(annotation)
+
+        return annotations
 

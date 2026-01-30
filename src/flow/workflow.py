@@ -29,7 +29,7 @@ _custom_workflow_semconv = WorkflowSemConv("CustomWorkflow")
 
 CUSTOM_WORKFLOW_TASK_QUEUE = _custom_workflow_semconv.task_queue()
 
-_PROCESSOR_NAME = "processorCustomWorkflow"
+_PROCESSOR_NAME = "customWorkflow"
 
 _logger = workflow.LoggerAdapter(logging.getLogger(__name__), None)
 

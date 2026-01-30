@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from typing import Any
 
 from forge.execution import ExecutionContext
@@ -19,6 +20,189 @@ from flow.flow_loader import FlowLoader
 from flow.io_mapping import InputMapper, OutputMapper
 
 _logger = activity.LoggerAdapter(logging.getLogger(__name__), None)
+
+
+async def _enrich_with_annotations(  # noqa: C901, PLR0912, PLR0915
+    flow_outputs: dict[str, Any],
+    source_files: list[Any],
+) -> dict[str, Any]:
+    """Enrich flow outputs with QuestionAnswering-style annotations.
+
+    The `qa_default` flow returns `justifying_contents_ids` as **chunk IDs**.
+    The `processor-questionAnswering` output expects:
+    - `annotations[].id` to be a stable UUID derived from (file_uuid, chunk_id)
+    - `sourcedContent` citations to reference these annotation IDs
+
+    This function therefore:
+    - fetches **all chunks per source document** using search client by **checksum**
+    - builds annotations for the specific `justifying_contents_ids`
+    - adds `annotations` and `citation_annotation_ids` back into the flow outputs
+
+    No fallback behavior: if a cited chunk cannot be resolved, we fail.
+    """
+    _logger.info("Starting annotation enrichment (strict)")
+
+    try:
+        from forge_tools.clients import search_client
+        from matsu_sdk.core.model.spatial.position_bbox import PositionBbox
+    except ImportError as e:
+        msg = f"Missing dependencies for annotation enrichment: {e}"
+        raise RuntimeError(msg) from e
+
+    # Collect content_ids referenced by flow outputs (single or multi question).
+    # In Forge tooling, "<content_id: ...>" refers to DocumentStatementContent.id,
+    # i.e. uuid5(f"{file_uuid}:{chunk_id}").
+    content_ids: list[str] = []
+    if "final_result" in flow_outputs:
+        final_result = flow_outputs.get("final_result", {})
+        content_ids = list(final_result.get("justifying_contents_ids", []) or [])
+    elif "answers" in flow_outputs:
+        for answer in flow_outputs.get("answers", []) or []:
+            content_ids.extend(list(answer.get("justifying_contents_ids", []) or []))
+
+    if not content_ids:
+        _logger.info("No justifying_contents_ids found, skipping annotation enrichment")
+        return flow_outputs
+
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    unique_content_ids = [x for x in content_ids if not (x in seen or seen.add(x))]
+
+    # Index chunks by chunk.id across all source documents
+    client = search_client()
+    if getattr(client, "_session", None) is None:
+        await client.start()
+
+    def _content_id(document_id: str, chunk_id: str) -> str:
+        # Matches pyclark_core.content.DocumentStatementContent.generate_uuid()
+        return str(uuid.uuid5(uuid.NAMESPACE_OID, f"{document_id}:{chunk_id}"))
+
+    def _doc_id_variants(raw_id: str) -> list[str]:
+        """Return possible document_id strings used in DocumentStatementContent.
+
+        In Forge tools, DocumentStatementContent.document_id is taken from file metadata `id`.
+        Depending on upstream services, that can be:
+        - bare UUID (e.g. df8b...)
+        - an entity string (e.g. "id=UUID('df8b...') entity_type='FILE'")
+        """
+        variants: list[str] = []
+        if raw_id:
+            variants.append(raw_id)
+
+        # If raw_id is an entity string, also include the extracted UUID.
+        if "UUID('" in raw_id:
+            try:
+                extracted = raw_id.split("UUID('", 1)[1].split("')", 1)[0]
+                if extracted and extracted not in variants:
+                    variants.append(extracted)
+            except Exception:
+                pass
+
+        # If raw_id looks like a bare UUID, also include the common entity string form.
+        # (This matches what we saw in activity outputs: "id=UUID('...') entity_type='FILE'")
+        if len(raw_id) == 36 and raw_id.count("-") == 4:
+            entity = f"id=UUID('{raw_id}') entity_type='FILE'"
+            if entity not in variants:
+                variants.append(entity)
+
+        return variants
+
+    chunk_by_content_id: dict[str, tuple[object, str, str]] = {}
+    remaining: set[str] = set(unique_content_ids)
+    for f in source_files:
+        file_uuid = getattr(f, "id", "") or ""
+        file_checksum = getattr(f, "checksum", "") or ""
+        file_name = getattr(f, "name", "") or ""
+        if not file_uuid or not file_checksum:
+            continue
+
+        doc_id_candidates = _doc_id_variants(file_uuid)
+        doc_chunks = await client.get_document_chunks(file_checksum)
+        for ch in doc_chunks:
+            if ch.id:
+                for doc_id in doc_id_candidates:
+                    cid = _content_id(doc_id, ch.id)
+                    if cid in remaining:
+                        chunk_by_content_id[cid] = (ch, file_uuid, file_name)
+                        remaining.remove(cid)
+                        if not remaining:
+                            break
+                if not remaining:
+                    break
+        if not remaining:
+            break
+
+    missing = sorted(remaining)
+    if missing:
+        msg = (
+            "Could not resolve cited content ids from search service. "
+            f"Missing {len(missing)}/{len(unique_content_ids)}: {missing[:10]}"
+        )
+        raise RuntimeError(msg)
+
+    def _positions_list(chunk: object) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        meta = getattr(chunk, "meta_data", None)
+        positions = getattr(meta, "positions", None) if meta else None
+        if not positions:
+            return out
+        # positions is typically a dict[str, Position] (matsu_sdk types)
+        for pos in positions.values():
+            if isinstance(pos, PositionBbox) and getattr(pos, "bbox", None):
+                bbox = pos.bbox
+                out.append(
+                    {
+                        "bboxPosition": {
+                            "bbox": {
+                                "x0": float(bbox.x0),
+                                "y0": float(bbox.y0),
+                                "x1": float(bbox.x1),
+                                "y1": float(bbox.y1),
+                            },
+                            "pageNumber": int(pos.page_number),
+                        },
+                    },
+                )
+        return out
+
+    def _build_annotations_for(
+        content_ids_in_order: list[str],
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        annotations: list[dict[str, Any]] = []
+        citation_ids: list[str] = []
+        for cid in content_ids_in_order:
+            chunk, file_uuid, file_name = chunk_by_content_id[cid]
+            citation_ids.append(cid)
+            annotations.append(
+                {
+                    "id": cid,
+                    "documentStatement": {
+                        "documentId": file_uuid,
+                        "documentName": file_name,
+                        "content": getattr(chunk, "content", "") or "",
+                        "positions": _positions_list(chunk),
+                    },
+                },
+            )
+        return annotations, citation_ids
+
+    # Enrich flow outputs (single vs multi question)
+    if "final_result" in flow_outputs:
+        final_result = flow_outputs.get("final_result", {})
+        ids_in_order = list(final_result.get("justifying_contents_ids", []) or [])
+        annotations, citation_ids = _build_annotations_for(ids_in_order)
+        flow_outputs["final_result"]["annotations"] = annotations
+        flow_outputs["final_result"]["citation_annotation_ids"] = citation_ids
+        _logger.info("Added %d annotations to final_result", len(annotations))
+
+    if "answers" in flow_outputs:
+        for answer in flow_outputs.get("answers", []) or []:
+            ids_in_order = list(answer.get("justifying_contents_ids", []) or [])
+            annotations, citation_ids = _build_annotations_for(ids_in_order)
+            answer["annotations"] = annotations
+            answer["citation_annotation_ids"] = citation_ids
+
+    return flow_outputs
 
 
 class CustomWorkflowActivity:
@@ -116,9 +300,18 @@ class CustomWorkflowActivity:
             _logger.error(error_msg)
             raise RuntimeError(error_msg)
 
-        # 5) Map outputs to QuestionAnswer list
-        answers = OutputMapper.to_question_answers(
+        # 5) Enrich outputs with annotation data from search service
+        enriched_outputs = await _enrich_with_annotations(
             flow_outputs=result.outputs,
+            source_files=[
+                *list(task_config.first_source_files),
+                *list(task_config.second_source_files),
+            ],
+        )
+
+        # 6) Map outputs to QuestionAnswer list
+        answers = OutputMapper.to_question_answers(
+            flow_outputs=enriched_outputs,
             original_questions=list[Question](task_config.questions),
         )
 
